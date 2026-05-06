@@ -3,7 +3,7 @@
 #define AppExeName "WindowsAppRestarter.exe"
 
 #ifndef AppVersion
-#define AppVersion "0.1.0"
+#define AppVersion "0.1.1"
 #endif
 
 #ifndef SourceDir
@@ -23,6 +23,7 @@ OutputDir=Output
 PrivilegesRequired=lowest
 Compression=lzma
 SolidCompression=yes
+SetupIconFile=..\src\WindowsAppRestarter\Assets\app.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 
 [Tasks]

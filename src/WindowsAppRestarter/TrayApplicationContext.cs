@@ -8,6 +8,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly RestartService restartService = new();
     private readonly StartupManager startupManager = new(Application.ExecutablePath);
+    private readonly Icon trayAppIcon;
     private readonly NotifyIcon trayIcon;
     private readonly ToolStripMenuItem restartMenuItem;
     private readonly ToolStripMenuItem startupMenuItem;
@@ -16,6 +17,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
+        trayAppIcon = LoadTrayIcon();
+
         restartMenuItem = new ToolStripMenuItem("Restart Windows App + Explorer", null, (_, _) => _ = RestartAsync());
         if (SystemFonts.MenuFont is { } menuFont)
         {
@@ -51,7 +54,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         trayIcon = new NotifyIcon
         {
             ContextMenuStrip = menu,
-            Icon = SystemIcons.Application,
+            Icon = trayAppIcon,
             Text = "Windows App Restarter",
             Visible = true
         };
@@ -67,6 +70,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             trayIcon.Visible = false;
             trayIcon.Dispose();
+            trayAppIcon.Dispose();
         }
 
         base.Dispose(disposing);
@@ -163,8 +167,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void RestoreTrayIcon()
     {
         trayIcon.Visible = false;
-        trayIcon.Icon = SystemIcons.Application;
+        trayIcon.Icon = trayAppIcon;
         trayIcon.Visible = true;
+    }
+
+    private static Icon LoadTrayIcon()
+    {
+        return Icon.ExtractAssociatedIcon(Application.ExecutablePath)
+            ?? new Icon(SystemIcons.Application, SystemInformation.SmallIconSize);
     }
 
     private void ShowBalloon(string title, string text, ToolTipIcon icon, int timeoutMilliseconds)

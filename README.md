@@ -1,5 +1,9 @@
 # Windows App Restarter
 
+<p align="center">
+  <img src="assets/logo.svg" width="128" alt="Windows App Restarter logo">
+</p>
+
 A tiny Windows tray utility that restarts the Windows App / Windows 365 client processes and restarts Explorer.
 
 It replaces this common manual script:
