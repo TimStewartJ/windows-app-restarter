@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Compute version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore
+        run: dotnet restore .\WindowsAppRestarter.sln
+
+      - name: Build
+        run: dotnet build .\WindowsAppRestarter.sln -c Release --no-restore
+
+      - name: Publish app
+        shell: pwsh
+        run: |
+          dotnet publish .\src\WindowsAppRestarter\WindowsAppRestarter.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:Version=${{ steps.version.outputs.value }} `
+            -o .\artifacts\publish\win-x64
+
+      - name: Add portable docs
+        shell: pwsh
+        run: |
+          Copy-Item .\README.md .\artifacts\publish\win-x64\README.txt
+          Copy-Item .\LICENSE .\artifacts\publish\win-x64\LICENSE.txt
+
+      - name: Zip portable app
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path .\artifacts\publish\win-x64\* `
+            -DestinationPath .\artifacts\WindowsAppRestarter-win-x64-portable.zip `
+            -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          $sourceDir = (Resolve-Path .\artifacts\publish\win-x64).Path
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=$env:APP_VERSION" `
+            "/DSourceDir=$sourceDir" `
+            .\installer\WindowsAppRestarter.iss
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts\WindowsAppRestarter-win-x64-portable.zip
+            installer\Output\WindowsAppRestarterSetup.exe
