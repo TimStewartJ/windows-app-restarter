@@ -18,6 +18,8 @@ Start-Process explorer.exe
 
 - Adds a tray icon named **Windows App Restarter**.
 - Double-click the icon, or right-click and choose **Restart Windows App + Explorer**.
+- Launching the app opens the tray menu; launching it again activates the existing tray instance instead of starting a duplicate copy.
+- The auto-start entry uses `--background` so the menu does not pop open every time you sign in.
 - Stops `Windows365`, `msrdcw`, and `msrdc` if they are running.
 - Restarts `explorer.exe` and recreates the tray icon afterward.
 - Shows a Windows notification with the result.

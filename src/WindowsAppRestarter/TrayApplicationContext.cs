@@ -8,14 +8,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly RestartService restartService = new();
     private readonly StartupManager startupManager = new(Application.ExecutablePath);
+    private readonly CancellationTokenSource activationCancellation = new();
+    private readonly System.Windows.Forms.Timer activationTimer;
     private readonly Icon trayAppIcon;
     private readonly NotifyIcon trayIcon;
+    private readonly ContextMenuStrip trayMenu;
     private readonly ToolStripMenuItem restartMenuItem;
     private readonly ToolStripMenuItem startupMenuItem;
     private readonly ToolStripMenuItem lastResultMenuItem;
+    private readonly Task activationListenerTask;
+    private int pendingActivations;
     private bool isRestarting;
 
-    public TrayApplicationContext()
+    public TrayApplicationContext(bool showMenuOnStartup)
     {
         trayAppIcon = LoadTrayIcon();
 
@@ -38,9 +43,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var openLogsMenuItem = new ToolStripMenuItem("Open logs", null, (_, _) => OpenLogs());
         var exitMenuItem = new ToolStripMenuItem("Exit", null, (_, _) => ExitApplication());
 
-        var menu = new ContextMenuStrip();
-        menu.Opening += (_, _) => RefreshStartupMenuState();
-        menu.Items.AddRange(
+        trayMenu = new ContextMenuStrip();
+        trayMenu.Opening += (_, _) => RefreshStartupMenuState();
+        trayMenu.Items.AddRange(
         [
             restartMenuItem,
             new ToolStripSeparator(),
@@ -53,7 +58,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         trayIcon = new NotifyIcon
         {
-            ContextMenuStrip = menu,
+            ContextMenuStrip = trayMenu,
             Icon = trayAppIcon,
             Text = "Windows App Restarter",
             Visible = true
@@ -61,16 +66,32 @@ internal sealed class TrayApplicationContext : ApplicationContext
         trayIcon.DoubleClick += (_, _) => _ = RestartAsync();
 
         RefreshStartupMenuState();
-        ShowBalloon("Windows App Restarter", "Ready. Double-click the tray icon to restart.", ToolTipIcon.Info, 1500);
+        activationTimer = new System.Windows.Forms.Timer { Interval = 150 };
+        activationTimer.Tick += (_, _) => ShowPendingActivation();
+        activationTimer.Start();
+        activationListenerTask = SingleInstanceActivation.ListenAsync(QueueActivation, activationCancellation.Token);
+
+        if (showMenuOnStartup)
+        {
+            QueueActivation();
+        }
+        else
+        {
+            ShowBalloon("Windows App Restarter", "Ready. Double-click the tray icon to restart.", ToolTipIcon.Info, 1500);
+        }
     }
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            activationCancellation.Cancel();
+            activationTimer.Dispose();
             trayIcon.Visible = false;
             trayIcon.Dispose();
+            trayMenu.Dispose();
             trayAppIcon.Dispose();
+            activationCancellation.Dispose();
         }
 
         base.Dispose(disposing);
@@ -171,6 +192,24 @@ internal sealed class TrayApplicationContext : ApplicationContext
         trayIcon.Visible = true;
     }
 
+    private void QueueActivation()
+    {
+        Interlocked.Exchange(ref pendingActivations, 1);
+    }
+
+    private void ShowPendingActivation()
+    {
+        if (Interlocked.Exchange(ref pendingActivations, 0) == 0)
+        {
+            return;
+        }
+
+        AppLogger.Info("External launch activated the tray menu.");
+        RestoreTrayIcon();
+        RefreshStartupMenuState();
+        trayMenu.Show(Cursor.Position);
+    }
+
     private static Icon LoadTrayIcon()
     {
         return Icon.ExtractAssociatedIcon(Application.ExecutablePath)
@@ -185,6 +224,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void ExitApplication()
     {
         AppLogger.Info("Exit requested.");
+        activationCancellation.Cancel();
         trayIcon.Visible = false;
         ExitThread();
     }

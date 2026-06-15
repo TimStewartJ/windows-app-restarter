@@ -3,7 +3,7 @@
 #define AppExeName "WindowsAppRestarter.exe"
 
 #ifndef AppVersion
-#define AppVersion "0.1.1"
+#define AppVersion "0.1.2"
 #endif
 
 #ifndef SourceDir
@@ -36,7 +36,7 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "WindowsAppRestarter"; ValueData: """{app}\{#AppExeName}"""; Tasks: startup; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "WindowsAppRestarter"; ValueData: """{app}\{#AppExeName}"" --background"; Tasks: startup; Flags: uninsdeletevalue
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent

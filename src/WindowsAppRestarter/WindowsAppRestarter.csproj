@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WindowsAppRestarter</AssemblyName>
     <RootNamespace>WindowsAppRestarter</RootNamespace>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <Authors>TimStewartJ</Authors>
     <Description>A tray utility for restarting the Windows App client and Explorer.</Description>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>

@@ -7,14 +7,17 @@ internal sealed class StartupManager(string executablePath)
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "WindowsAppRestarter";
 
-    private string StartupCommand => $"\"{executablePath}\"";
+    private string StartupCommand => $"\"{executablePath}\" --background";
+
+    private string LegacyStartupCommand => $"\"{executablePath}\"";
 
     public bool IsEnabled()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: false);
         var value = key?.GetValue(ValueName) as string;
 
-        return string.Equals(value, StartupCommand, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(value, StartupCommand, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(value, LegacyStartupCommand, StringComparison.OrdinalIgnoreCase);
     }
 
     public void SetEnabled(bool enabled)
