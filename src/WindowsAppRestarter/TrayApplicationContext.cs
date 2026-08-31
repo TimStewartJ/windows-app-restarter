@@ -46,7 +46,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         statusMenuItem = new ToolStripMenuItem(status.ToMenuText()) { Enabled = false };
         startupMenuItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => SetStartup(!ReadStartupEnabled()));
 
-        var openMenuItem = new ToolStripMenuItem("Open", null, (_, _) => ShowFlyout());
+        var openMenuItem = new ToolStripMenuItem("Open", null, (_, _) => flyout.ShowFlyout(Cursor.Position, takeFocus: true));
         var openLogsMenuItem = new ToolStripMenuItem("Open log file", null, (_, _) => OpenLogs());
         var exitMenuItem = new ToolStripMenuItem("Exit", null, (_, _) => ExitApplication());
 
@@ -124,13 +124,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         if (!flyout.Visible)
         {
-            flyout.ShowFlyout(Cursor.Position);
+            flyout.ShowFlyout(Cursor.Position, takeFocus: true);
         }
 
         _ = RestartAsync();
     }
 
-    private void ShowFlyout() => flyout.ShowFlyout(Cursor.Position);
 
     private async Task RestartAsync()
     {
@@ -258,7 +257,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         AppLogger.Info("Launch activated the flyout.");
         RestoreTrayIcon();
         RefreshStartupMenuState();
-        ShowFlyout();
+        // Launches (Start menu, scripts, a second instance) must never steal keyboard focus.
+        flyout.ShowFlyout(Cursor.Position, takeFocus: false);
     }
 
     private static Icon LoadTrayIcon()

@@ -14,7 +14,7 @@ internal sealed record RestartStatus(RestartState State, string Title, string De
     public static RestartStatus Idle { get; } = new(
         RestartState.Idle,
         "Ready",
-        "Restart Windows App and Explorer whenever the client stops responding.",
+        "Restarts Windows App, clears stuck passkey and sign-in prompts, and restarts Explorer.",
         null);
 
     public static RestartStatus Running(string step) => new(RestartState.Running, "Restarting…", step, null);

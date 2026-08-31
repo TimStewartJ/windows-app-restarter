@@ -6,11 +6,18 @@ namespace WindowsAppRestarter;
 internal sealed class RestartService
 {
     private static readonly string[] WindowsAppProcessNames = ["Windows365", "msrdcw", "msrdc"];
+
+    // On-demand sign-in brokers that Windows respawns automatically. A stale instance holding an orphaned
+    // "Windows Security" passkey prompt or "Work or school account" window makes every new passkey request
+    // fail with RPC_S_CALL_IN_PROGRESS until it is cleared.
+    private static readonly string[] SignInBrokerProcessNames = ["CredentialUIBroker", "Microsoft.AAD.BrokerPlugin"];
+
     private static readonly TimeSpan ProcessExitTimeout = TimeSpan.FromSeconds(5);
 
     public async Task<RestartResult> RestartAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         var stoppedWindowsAppProcesses = new List<StoppedProcess>();
+        var stoppedSignInBrokerProcesses = new List<StoppedProcess>();
         var stoppedExplorerProcesses = new List<StoppedProcess>();
         var failures = new List<string>();
 
@@ -22,6 +29,17 @@ internal sealed class RestartService
                 stoppedWindowsAppProcesses,
                 failures,
                 entireProcessTree: true,
+                cancellationToken);
+        }
+
+        progress?.Report("Clearing stuck sign-in prompts…");
+        foreach (var processName in SignInBrokerProcessNames)
+        {
+            await StopProcessesByNameAsync(
+                processName,
+                stoppedSignInBrokerProcesses,
+                failures,
+                entireProcessTree: false,
                 cancellationToken);
         }
 
@@ -43,7 +61,7 @@ internal sealed class RestartService
             explorerStarted = true;
         }
 
-        return new RestartResult(stoppedWindowsAppProcesses, stoppedExplorerProcesses, explorerStarted, failures);
+        return new RestartResult(stoppedWindowsAppProcesses, stoppedSignInBrokerProcesses, stoppedExplorerProcesses, explorerStarted, failures);
     }
 
     private static async Task StopProcessesByNameAsync(

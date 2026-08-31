@@ -4,12 +4,13 @@
   <img src="assets/logo.svg" width="128" alt="Windows App Restarter logo">
 </p>
 
-A tiny Windows tray utility that restarts the Windows App / Windows 365 client processes and restarts Explorer.
+A tiny Windows tray utility that restarts the Windows App / Windows 365 client processes, clears stuck passkey and sign-in prompts, and restarts Explorer.
 
 It replaces this common manual script:
 
 ```powershell
 Get-Process -Name Windows365, msrdcw, msrdc | Stop-Process -Force
+Get-Process -Name CredentialUIBroker, Microsoft.AAD.BrokerPlugin | Stop-Process -Force
 Get-Process -Name explorer | Stop-Process -Force
 Start-Process explorer.exe
 ```
@@ -23,9 +24,11 @@ Start-Process explorer.exe
 - Adds a tray icon named **Windows App Restarter**.
 - Click the icon to open a Windows 11 style flyout with the restart button, live progress, the last result, and settings.
 - Double-click the icon to restart immediately, or right-click for a compact menu.
-- Launching the app opens the flyout; launching it again activates the existing tray instance instead of starting a duplicate copy.
+- Launching the app opens the flyout **without stealing keyboard focus** (so a script or shortcut can never hijack what you're typing); launching it again activates the existing tray instance instead of starting a duplicate copy. Click into the flyout to give it focus.
+- Enter/Space only trigger a control you've explicitly focused with the keyboard, and keystrokes are ignored for the first half-second after the flyout appears.
 - The auto-start entry uses `--background` so the flyout does not pop open every time you sign in.
 - Stops `Windows365`, `msrdcw`, and `msrdc` if they are running.
+- Clears stuck sign-in prompts by stopping the on-demand `CredentialUIBroker` (Windows Security / passkey dialog) and `Microsoft.AAD.BrokerPlugin` (work or school account) brokers. A stale broker makes every redirected passkey request fail with "a remote procedure call is already in progress" until it is cleared; Windows recreates both automatically.
 - Restarts `explorer.exe` and recreates the tray icon afterward.
 - Shows a Windows notification with the result when the flyout is closed.
 - Can start automatically when you sign in.

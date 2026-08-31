@@ -16,11 +16,12 @@ internal static class NativeMethods
 
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_TOPMOST = 0x00000008;
+    public const int WS_EX_NOACTIVATE = 0x08000000;
+    public const int GWL_EXSTYLE = -20;
 
     public const int WM_SETTINGCHANGE = 0x001A;
     public const int WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320;
 
-    public const int ASFW_ANY = -1;
 
     [StructLayout(LayoutKind.Sequential)]
     public struct MARGINS
@@ -42,11 +43,26 @@ internal static class NativeMethods
     public static extern bool SetForegroundWindow(nint hwnd);
 
     [DllImport("user32.dll", ExactSpelling = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool AllowSetForegroundWindow(int processId);
-
-    [DllImport("user32.dll", ExactSpelling = true)]
     public static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", ExactSpelling = true)]
+    private static extern nint GetWindowLongPtr(nint hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", ExactSpelling = true)]
+    private static extern nint SetWindowLongPtr(nint hwnd, int index, nint value);
+
+    /// <summary>Adds or removes WS_EX_NOACTIVATE so the window can be shown without ever taking focus.</summary>
+    public static void SetNoActivate(nint hwnd, bool noActivate)
+    {
+        var style = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+        var updated = noActivate ? style | WS_EX_NOACTIVATE : style & ~(nint)WS_EX_NOACTIVATE;
+        if (updated != style)
+        {
+            SetWindowLongPtr(hwnd, GWL_EXSTYLE, updated);
+        }
+    }
+
+    public static bool HasNoActivate(nint hwnd) => (GetWindowLongPtr(hwnd, GWL_EXSTYLE) & WS_EX_NOACTIVATE) != 0;
 
     [DllImport("user32.dll", ExactSpelling = true)]
     public static extern short GetAsyncKeyState(int virtualKey);

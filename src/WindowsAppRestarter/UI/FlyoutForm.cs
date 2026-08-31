@@ -15,6 +15,8 @@ internal sealed class FlyoutForm : Form
     private const int TaskbarGapDip = 12;
     private const int SlideDistanceDip = 14;
     private const double SlideDurationSeconds = 0.18;
+    // Keystrokes already in flight when the flyout appears must never trigger anything.
+    private const double InputGraceSeconds = 0.5;
     private static readonly TimeSpan ToggleGuard = TimeSpan.FromMilliseconds(350);
 
     private readonly string versionText;
@@ -48,7 +50,10 @@ internal sealed class FlyoutForm : Form
     private Point slideFrom;
     private Point lastAnchor;
     private double slideStartSeconds = -1;
+    private double shownAtSeconds;
     private bool suppressDeactivate;
+    private bool showWithoutActivation;
+    private bool reactivateAfterRestart;
 
     public FlyoutForm(Icon appIcon, string versionText)
     {
@@ -115,13 +120,17 @@ internal sealed class FlyoutForm : Form
         get
         {
             var parameters = base.CreateParams;
-            parameters.ExStyle |= NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_TOPMOST;
+            // WS_EX_NOACTIVATE: Windows otherwise activates a process's first top-level window the moment its
+            // handle is created, stealing keyboard focus before the flyout is even visible. It is lifted only
+            // when focus is genuinely wanted (a tray click, or the user clicking into the flyout).
+            parameters.ExStyle |= NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_TOPMOST | NativeMethods.WS_EX_NOACTIVATE;
             return parameters;
         }
     }
 
     public void SetStatus(RestartStatus value)
     {
+        var wasRunning = status.IsRunning;
         status = value;
         restartButton.Enabled = !value.IsRunning;
         if (!restartButton.Enabled && pressedElement == restartButton)
@@ -132,9 +141,26 @@ internal sealed class FlyoutForm : Form
 
         if (Visible)
         {
+            if (!wasRunning && value.IsRunning)
+            {
+                reactivateAfterRestart = ActiveForm == this;
+            }
+
             PerformFlyoutLayout();
             UpdateAnimationTimer();
             Invalidate();
+
+            if (wasRunning && !value.IsRunning)
+            {
+                // Restarting Explorer steals activation. Only take it back if the user was interacting with us.
+                if (reactivateAfterRestart)
+                {
+                    TakeFocus();
+                }
+
+                reactivateAfterRestart = false;
+                outsideClickTimer.Start();
+            }
         }
     }
 
@@ -162,10 +188,14 @@ internal sealed class FlyoutForm : Form
             return;
         }
 
-        ShowFlyout(anchor);
+        ShowFlyout(anchor, takeFocus: true);
     }
 
-    public void ShowFlyout(Point anchor)
+    /// <summary>
+    /// Shows the flyout. With <paramref name="takeFocus"/> false (launches, scripts, activation from another
+    /// instance) it appears on top but never steals keyboard focus from whatever the user is doing.
+    /// </summary>
+    public void ShowFlyout(Point anchor, bool takeFocus)
     {
         lastAnchor = anchor;
         RefreshTheme();
@@ -175,6 +205,7 @@ internal sealed class FlyoutForm : Form
         slideFrom = new Point(restingLocation.X + slideOffset.X, restingLocation.Y + slideOffset.Y);
         Location = Visible ? restingLocation : slideFrom;
         slideStartSeconds = Visible ? -1 : clock.Elapsed.TotalSeconds;
+        shownAtSeconds = clock.Elapsed.TotalSeconds;
 
         focusedIndex = -1;
         showFocusVisuals = false;
@@ -183,17 +214,32 @@ internal sealed class FlyoutForm : Form
             element.Focused = false;
         }
 
+        showWithoutActivation = !takeFocus;
+        NativeMethods.SetNoActivate(Handle, !takeFocus);
         if (!Visible)
         {
             Show();
         }
 
-        Activate();
-        NativeMethods.SetForegroundWindow(Handle);
+        if (takeFocus)
+        {
+            TakeFocus();
+        }
+
         lastFrameSeconds = clock.Elapsed.TotalSeconds;
         UpdateAnimationTimer();
         outsideClickTimer.Start();
         Invalidate();
+    }
+
+    protected override bool ShowWithoutActivation => showWithoutActivation;
+
+    private void TakeFocus()
+    {
+        NativeMethods.SetNoActivate(Handle, false);
+        showWithoutActivation = false;
+        Activate();
+        NativeMethods.SetForegroundWindow(Handle);
     }
 
     public void HideFlyout()
@@ -249,7 +295,8 @@ internal sealed class FlyoutForm : Form
     protected override void OnDeactivate(EventArgs e)
     {
         base.OnDeactivate(e);
-        if (!suppressDeactivate && Visible)
+        // Restarting Explorer yanks the foreground away; keep showing progress instead of vanishing mid-restart.
+        if (!suppressDeactivate && Visible && !status.IsRunning)
         {
             HideFlyout();
         }
@@ -725,6 +772,12 @@ internal sealed class FlyoutForm : Form
             return;
         }
 
+        // A deliberate click into a passively shown flyout is consent to take focus.
+        if (NativeMethods.HasNoActivate(Handle))
+        {
+            TakeFocus();
+        }
+
         showFocusVisuals = false;
         pressedElement = ElementAt(e.Location);
         if (pressedElement is not null)
@@ -774,8 +827,13 @@ internal sealed class FlyoutForm : Form
                 return true;
             case Keys.Enter:
             case Keys.Space:
-                var target = focusedIndex >= 0 ? elements[focusedIndex] : restartButton;
-                target.Activate();
+                // No implicit default action: only an element the user explicitly focused can be triggered,
+                // and never within the grace period right after the flyout appeared.
+                if (focusedIndex >= 0 && clock.Elapsed.TotalSeconds - shownAtSeconds >= InputGraceSeconds)
+                {
+                    elements[focusedIndex].Activate();
+                }
+
                 return true;
             default:
                 return base.ProcessDialogKey(keyData);
