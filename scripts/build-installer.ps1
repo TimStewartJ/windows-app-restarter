@@ -25,4 +25,9 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-Write-Host "Installer written to $(Join-Path $repoRoot 'installer\Output\WindowsAppRestarterSetup.exe')" -ForegroundColor Green
+$installerPath = Join-Path $repoRoot 'installer\Output\WindowsAppRestarterSetup.exe'
+$hash = (Get-FileHash $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+[System.IO.File]::WriteAllText((Join-Path $repoRoot 'installer\Output\SHA256SUMS.txt'), "$hash  WindowsAppRestarterSetup.exe`n")
+
+Write-Host "Installer written to $installerPath" -ForegroundColor Green
+Write-Host "SHA-256: $hash" -ForegroundColor Green

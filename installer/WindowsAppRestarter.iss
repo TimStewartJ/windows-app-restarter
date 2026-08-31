@@ -3,7 +3,7 @@
 #define AppExeName "WindowsAppRestarter.exe"
 
 #ifndef AppVersion
-#define AppVersion "0.2.1"
+#define AppVersion "0.3.0"
 #endif
 
 #ifndef SourceDir
@@ -40,3 +40,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+; Silent self-update: the running app exits, launches this installer with /RELAUNCH=1, and is brought back here.
+Filename: "{app}\{#AppExeName}"; Parameters: "--background --updated"; Flags: nowait; Check: IsAutoUpdateRelaunch
+
+[Code]
+function IsAutoUpdateRelaunch: Boolean;
+begin
+  Result := ExpandConstant('{param:RELAUNCH|0}') = '1';
+end;

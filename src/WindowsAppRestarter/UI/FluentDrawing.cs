@@ -12,6 +12,7 @@ internal static class FluentGlyphs
     public const string ErrorBadge = "\uEA39";
     public const string Info = "\uE946";
     public const string Power = "\uE7E8";
+    public const string Sync = "\uE895";
     public const string Document = "\uE8A5";
     public const string ChevronRight = "\uE76C";
 }

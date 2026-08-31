@@ -23,6 +23,7 @@ internal sealed class FlyoutForm : Form
     private readonly Icon appIcon;
     private readonly AccentButton restartButton;
     private readonly ToggleRow startupToggle;
+    private readonly ToggleRow autoUpdateToggle;
     private readonly NavigationRow logsRow;
     private readonly SubtleButton exitButton;
     private readonly FlyoutElement[] elements;
@@ -88,6 +89,14 @@ internal sealed class FlyoutForm : Form
         };
         toggle.Activated = () => StartupToggled?.Invoke(!toggle.Checked);
         startupToggle = toggle;
+        var updates = new ToggleRow
+        {
+            Glyph = FluentGlyphs.Sync,
+            Label = "Automatic updates",
+            Description = "Install new versions silently in the background"
+        };
+        updates.Activated = () => AutoUpdateToggled?.Invoke(!updates.Checked);
+        autoUpdateToggle = updates;
         logsRow = new NavigationRow
         {
             Glyph = FluentGlyphs.Document,
@@ -99,7 +108,7 @@ internal sealed class FlyoutForm : Form
             Text = "Exit",
             Activated = () => ExitRequested?.Invoke()
         };
-        elements = [restartButton, startupToggle, logsRow, exitButton];
+        elements = [restartButton, startupToggle, autoUpdateToggle, logsRow, exitButton];
 
         animationTimer = new System.Windows.Forms.Timer { Interval = 15 };
         animationTimer.Tick += (_, _) => OnAnimationFrame();
@@ -112,6 +121,7 @@ internal sealed class FlyoutForm : Form
 
     public event Action? RestartRequested;
     public event Action<bool>? StartupToggled;
+    public event Action<bool>? AutoUpdateToggled;
     public event Action? OpenLogsRequested;
     public event Action? ExitRequested;
 
@@ -167,6 +177,16 @@ internal sealed class FlyoutForm : Form
     public void SetStartupEnabled(bool enabled, bool animate)
     {
         startupToggle.SetChecked(enabled, animate && Visible);
+        if (Visible)
+        {
+            UpdateAnimationTimer();
+            Invalidate();
+        }
+    }
+
+    public void SetAutoUpdateEnabled(bool enabled, bool animate)
+    {
+        autoUpdateToggle.SetChecked(enabled, animate && Visible);
         if (Visible)
         {
             UpdateAnimationTimer();
@@ -425,6 +445,9 @@ internal sealed class FlyoutForm : Form
 
         startupToggle.Bounds = new Rectangle(padding, y, contentWidth, Px(60));
         y += startupToggle.Bounds.Height + Px(4);
+
+        autoUpdateToggle.Bounds = new Rectangle(padding, y, contentWidth, Px(60));
+        y += autoUpdateToggle.Bounds.Height + Px(4);
 
         logsRow.Bounds = new Rectangle(padding, y, contentWidth, Px(48));
         y += logsRow.Bounds.Height + Px(16);

@@ -76,9 +76,27 @@ jobs:
             "/DSourceDir=$sourceDir" `
             .\installer\WindowsAppRestarter.iss
 
+      # The in-app updater refuses to install anything whose SHA-256 is not listed here.
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            '.\artifacts\WindowsAppRestarter-win-x64-portable.zip',
+            '.\installer\Output\WindowsAppRestarterSetup.exe'
+          )
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path $file -Leaf)"
+          }
+          [System.IO.File]::WriteAllText(
+            (Join-Path (Get-Location) 'artifacts\SHA256SUMS.txt'),
+            (($lines -join "`n") + "`n"))
+          Get-Content .\artifacts\SHA256SUMS.txt
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts\WindowsAppRestarter-win-x64-portable.zip
             installer\Output\WindowsAppRestarterSetup.exe
+            artifacts\SHA256SUMS.txt

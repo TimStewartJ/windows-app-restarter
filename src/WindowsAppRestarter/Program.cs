@@ -14,6 +14,8 @@ internal static class Program
 
         var startInBackground = args.Any(argument =>
             string.Equals(argument, "--background", StringComparison.OrdinalIgnoreCase));
+        var relaunchedAfterUpdate = args.Any(argument =>
+            string.Equals(argument, "--updated", StringComparison.OrdinalIgnoreCase));
 
         using var mutex = SingleInstanceActivation.CreateMutex(out var createdNew);
         if (!createdNew)
@@ -30,7 +32,9 @@ internal static class Program
             return;
         }
 
-        AppLogger.Info("Application started.");
+        AppLogger.Info(relaunchedAfterUpdate
+            ? $"Application started after automatic update to version {Application.ProductVersion}."
+            : "Application started.");
         Application.Run(new TrayApplicationContext(showFlyoutOnStartup: !startInBackground));
         AppLogger.Info("Application exited.");
         GC.KeepAlive(mutex);
