@@ -13,20 +13,24 @@ internal sealed record RestartResult(
 {
     public string ToSummary()
     {
-        var windowsAppSummary = WindowsAppProcesses.Count == 0
-            ? "No Windows App processes were running."
-            : $"Stopped {WindowsAppProcesses.Count} Windows App process(es).";
+        var windowsAppSummary = WindowsAppProcesses.Count switch
+        {
+            0 => "No Windows App processes were running.",
+            1 => "Stopped 1 Windows App process.",
+            var count => $"Stopped {count} Windows App processes."
+        };
 
         var explorerSummary = ExplorerStarted
             ? "Explorer relaunched."
-            : "Explorer was already running after restart.";
+            : "Explorer came back on its own.";
 
         if (Failures.Count == 0)
         {
             return $"{windowsAppSummary} {explorerSummary}";
         }
 
-        return $"{windowsAppSummary} {explorerSummary} {Failures.Count} issue(s); open logs for details.";
+        var issues = Failures.Count == 1 ? "1 issue" : $"{Failures.Count} issues";
+        return $"{windowsAppSummary} {explorerSummary} {issues} — open the log file for details.";
     }
 
     public string ToLogMessage()

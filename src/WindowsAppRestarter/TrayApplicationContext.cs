@@ -1,11 +1,15 @@
 using System.Diagnostics;
 using System.Drawing;
+using System.Reflection;
 using System.Windows.Forms;
+using WindowsAppRestarter.UI;
 
 namespace WindowsAppRestarter;
 
 internal sealed class TrayApplicationContext : ApplicationContext
 {
+    private const string AppName = "Windows App Restarter";
+
     private readonly RestartService restartService = new();
     private readonly StartupManager startupManager = new(Application.ExecutablePath);
     private readonly CancellationTokenSource activationCancellation = new();
@@ -15,14 +19,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ContextMenuStrip trayMenu;
     private readonly ToolStripMenuItem restartMenuItem;
     private readonly ToolStripMenuItem startupMenuItem;
-    private readonly ToolStripMenuItem lastResultMenuItem;
+    private readonly ToolStripMenuItem statusMenuItem;
+    private readonly FlyoutForm flyout;
     private readonly Task activationListenerTask;
     private int pendingActivations;
-    private bool isRestarting;
+    private RestartStatus status = RestartStatus.Idle;
 
-    public TrayApplicationContext(bool showMenuOnStartup)
+    public TrayApplicationContext(bool showFlyoutOnStartup)
     {
         trayAppIcon = LoadTrayIcon();
+
+        flyout = new FlyoutForm(trayAppIcon, $"Version {GetDisplayVersion()}");
+        flyout.RestartRequested += () => _ = RestartAsync();
+        flyout.StartupToggled += SetStartup;
+        flyout.OpenLogsRequested += OpenLogs;
+        flyout.ExitRequested += ExitApplication;
+        flyout.SetStatus(status);
+        flyout.SetStartupEnabled(ReadStartupEnabled(), animate: false);
 
         restartMenuItem = new ToolStripMenuItem("Restart Windows App + Explorer", null, (_, _) => _ = RestartAsync());
         if (SystemFonts.MenuFont is { } menuFont)
@@ -30,28 +43,27 @@ internal sealed class TrayApplicationContext : ApplicationContext
             restartMenuItem.Font = new Font(menuFont, FontStyle.Bold);
         }
 
-        startupMenuItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleStartup())
-        {
-            CheckOnClick = false
-        };
+        statusMenuItem = new ToolStripMenuItem(status.ToMenuText()) { Enabled = false };
+        startupMenuItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => SetStartup(!ReadStartupEnabled()));
 
-        lastResultMenuItem = new ToolStripMenuItem("Last result: Nothing has run yet")
-        {
-            Enabled = false
-        };
-
-        var openLogsMenuItem = new ToolStripMenuItem("Open logs", null, (_, _) => OpenLogs());
+        var openMenuItem = new ToolStripMenuItem("Open", null, (_, _) => ShowFlyout());
+        var openLogsMenuItem = new ToolStripMenuItem("Open log file", null, (_, _) => OpenLogs());
         var exitMenuItem = new ToolStripMenuItem("Exit", null, (_, _) => ExitApplication());
 
-        trayMenu = new ContextMenuStrip();
-        trayMenu.Opening += (_, _) => RefreshStartupMenuState();
+        trayMenu = new ContextMenuStrip { ShowImageMargin = false };
+        trayMenu.Opening += (_, _) =>
+        {
+            flyout.HideFlyout();
+            RefreshStartupMenuState();
+        };
         trayMenu.Items.AddRange(
         [
+            openMenuItem,
             restartMenuItem,
             new ToolStripSeparator(),
+            statusMenuItem,
             startupMenuItem,
             openLogsMenuItem,
-            lastResultMenuItem,
             new ToolStripSeparator(),
             exitMenuItem
         ]);
@@ -60,24 +72,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             ContextMenuStrip = trayMenu,
             Icon = trayAppIcon,
-            Text = "Windows App Restarter",
+            Text = AppName,
             Visible = true
         };
-        trayIcon.DoubleClick += (_, _) => _ = RestartAsync();
+        trayIcon.MouseClick += OnTrayMouseClick;
+        trayIcon.MouseDoubleClick += OnTrayMouseDoubleClick;
 
         RefreshStartupMenuState();
-        activationTimer = new System.Windows.Forms.Timer { Interval = 150 };
+        activationTimer = new System.Windows.Forms.Timer { Interval = 100 };
         activationTimer.Tick += (_, _) => ShowPendingActivation();
         activationTimer.Start();
         activationListenerTask = SingleInstanceActivation.ListenAsync(QueueActivation, activationCancellation.Token);
 
-        if (showMenuOnStartup)
+        if (showFlyoutOnStartup)
         {
             QueueActivation();
-        }
-        else
-        {
-            ShowBalloon("Windows App Restarter", "Ready. Double-click the tray icon to restart.", ToolTipIcon.Info, 1500);
         }
     }
 
@@ -90,6 +99,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             trayIcon.Visible = false;
             trayIcon.Dispose();
             trayMenu.Dispose();
+            flyout.Dispose();
             trayAppIcon.Dispose();
             activationCancellation.Dispose();
         }
@@ -97,92 +107,133 @@ internal sealed class TrayApplicationContext : ApplicationContext
         base.Dispose(disposing);
     }
 
-    private async Task RestartAsync()
+    private void OnTrayMouseClick(object? sender, MouseEventArgs e)
     {
-        if (isRestarting)
+        if (e.Button == MouseButtons.Left)
         {
-            ShowBalloon("Windows App Restarter", "A restart is already running.", ToolTipIcon.Info, 1500);
+            flyout.ToggleFlyout(Cursor.Position);
+        }
+    }
+
+    private void OnTrayMouseDoubleClick(object? sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left)
+        {
             return;
         }
 
-        isRestarting = true;
-        restartMenuItem.Enabled = false;
-        lastResultMenuItem.Text = "Last result: Restart running...";
+        if (!flyout.Visible)
+        {
+            flyout.ShowFlyout(Cursor.Position);
+        }
+
+        _ = RestartAsync();
+    }
+
+    private void ShowFlyout() => flyout.ShowFlyout(Cursor.Position);
+
+    private async Task RestartAsync()
+    {
+        if (status.IsRunning)
+        {
+            return;
+        }
+
+        AppLogger.Info("Restart requested.");
+        UpdateStatus(RestartStatus.Running("Preparing…"));
 
         try
         {
-            AppLogger.Info("Restart requested.");
-            ShowBalloon("Windows App Restarter", "Restarting Windows App and Explorer...", ToolTipIcon.Info, 1000);
-
-            var result = await restartService.RestartAsync();
+            var progress = new Progress<string>(step => UpdateStatus(RestartStatus.Running(step)));
+            var result = await restartService.RestartAsync(progress);
             AppLogger.Info(result.ToLogMessage());
 
-            var summary = result.ToSummary();
-            lastResultMenuItem.Text = $"Last result: {summary}";
-
-            var icon = result.Failures.Count == 0 ? ToolTipIcon.Info : ToolTipIcon.Warning;
-            ShowBalloon("Windows App Restarter", summary, icon, 3000);
+            UpdateStatus(RestartStatus.FromResult(result));
+            if (!flyout.Visible)
+            {
+                var icon = result.Failures.Count == 0 ? ToolTipIcon.Info : ToolTipIcon.Warning;
+                ShowBalloon(status.Title, status.Detail, icon, 3000);
+            }
         }
         catch (Exception exception)
         {
             AppLogger.Error("Restart failed.", exception);
-            var message = $"Failed: {exception.Message}";
-            lastResultMenuItem.Text = $"Last result: {message}";
-            ShowBalloon("Windows App Restarter failed", exception.Message, ToolTipIcon.Error, 5000);
+            UpdateStatus(RestartStatus.Failure(exception));
+            if (!flyout.Visible)
+            {
+                ShowBalloon(status.Title, exception.Message, ToolTipIcon.Error, 5000);
+            }
         }
         finally
         {
-            isRestarting = false;
-            restartMenuItem.Enabled = true;
             RestoreTrayIcon();
         }
     }
 
-    private void ToggleStartup()
+    private void UpdateStatus(RestartStatus value)
+    {
+        status = value;
+        restartMenuItem.Enabled = !value.IsRunning;
+        statusMenuItem.Text = value.ToMenuText();
+        flyout.SetStatus(value);
+    }
+
+    private void SetStartup(bool enable)
     {
         try
         {
-            var enable = !startupManager.IsEnabled();
             startupManager.SetEnabled(enable);
             RefreshStartupMenuState();
 
             var message = enable
                 ? "Windows App Restarter will start when you sign in."
                 : "Windows App Restarter will no longer start when you sign in.";
-
             AppLogger.Info(message);
-            ShowBalloon("Start with Windows", message, ToolTipIcon.Info, 2500);
         }
         catch (Exception exception)
         {
             AppLogger.Error("Could not update startup setting.", exception);
+            RefreshStartupMenuState();
             ShowBalloon("Startup setting failed", exception.Message, ToolTipIcon.Error, 5000);
+        }
+    }
+
+    private bool ReadStartupEnabled()
+    {
+        try
+        {
+            return startupManager.IsEnabled();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("Could not read startup setting.", exception);
+            return false;
         }
     }
 
     private void RefreshStartupMenuState()
     {
-        try
-        {
-            startupMenuItem.Checked = startupManager.IsEnabled();
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Error("Could not read startup setting.", exception);
-            startupMenuItem.Checked = false;
-        }
+        var enabled = ReadStartupEnabled();
+        startupMenuItem.Checked = enabled;
+        flyout.SetStartupEnabled(enabled, animate: true);
     }
 
     private static void OpenLogs()
     {
-        Directory.CreateDirectory(AppLogger.LogDirectory);
-
-        if (!File.Exists(AppLogger.LogPath))
+        try
         {
-            File.WriteAllText(AppLogger.LogPath, string.Empty);
-        }
+            Directory.CreateDirectory(AppLogger.LogDirectory);
+            if (!File.Exists(AppLogger.LogPath))
+            {
+                File.WriteAllText(AppLogger.LogPath, string.Empty);
+            }
 
-        Process.Start(new ProcessStartInfo(AppLogger.LogPath) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(AppLogger.LogPath) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Error("Could not open the log file.", exception);
+        }
     }
 
     private void RestoreTrayIcon()
@@ -204,16 +255,34 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
 
-        AppLogger.Info("External launch activated the tray menu.");
+        AppLogger.Info("Launch activated the flyout.");
         RestoreTrayIcon();
         RefreshStartupMenuState();
-        trayMenu.Show(Cursor.Position);
+        ShowFlyout();
     }
 
     private static Icon LoadTrayIcon()
     {
+        try
+        {
+            var size = SystemInformation.SmallIconSize.Width;
+            if (Icon.ExtractIcon(Application.ExecutablePath, 0, size) is { } sized)
+            {
+                return sized;
+            }
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+        }
+
         return Icon.ExtractAssociatedIcon(Application.ExecutablePath)
             ?? new Icon(SystemIcons.Application, SystemInformation.SmallIconSize);
+    }
+
+    private static string GetDisplayVersion()
+    {
+        var version = Assembly.GetExecutingAssembly().GetName().Version;
+        return version is null ? "dev" : version.ToString(3);
     }
 
     private void ShowBalloon(string title, string text, ToolTipIcon icon, int timeoutMilliseconds)
@@ -225,6 +294,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         AppLogger.Info("Exit requested.");
         activationCancellation.Cancel();
+        flyout.HideFlyout();
         trayIcon.Visible = false;
         ExitThread();
     }

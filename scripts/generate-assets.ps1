@@ -15,17 +15,68 @@ function New-RoundedRectanglePath {
         [float] $Y,
         [float] $Width,
         [float] $Height,
-        [float] $Radius
+        [float] $Radius,
+        [switch] $TopOnly
     )
 
     $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
     $diameter = $Radius * 2
     $path.AddArc($X, $Y, $diameter, $diameter, 180, 90)
     $path.AddArc($X + $Width - $diameter, $Y, $diameter, $diameter, 270, 90)
-    $path.AddArc($X + $Width - $diameter, $Y + $Height - $diameter, $diameter, $diameter, 0, 90)
-    $path.AddArc($X, $Y + $Height - $diameter, $diameter, $diameter, 90, 90)
+    if ($TopOnly) {
+        $path.AddLine($X + $Width, $Y + $Height, $X, $Y + $Height)
+    }
+    else {
+        $path.AddArc($X + $Width - $diameter, $Y + $Height - $diameter, $diameter, $diameter, 0, 90)
+        $path.AddArc($X, $Y + $Height - $diameter, $diameter, $diameter, 90, 90)
+    }
     $path.CloseFigure()
     return $path
+}
+
+function Color([string] $hex) { return [System.Drawing.ColorTranslator]::FromHtml($hex) }
+
+# Draws a clockwise circular arrow: an arc with a round tail cap and a filled
+# triangular head, so it reads as "restart" instead of a clock face.
+function Draw-RestartArrow {
+    param(
+        [System.Drawing.Graphics] $Graphics,
+        [System.Drawing.Brush] $Brush,
+        [float] $CenterX,
+        [float] $CenterY,
+        [float] $Radius,
+        [float] $Stroke
+    )
+
+    $startAngle = -20.0
+    $sweep = 280.0
+    $endAngle = $startAngle + $sweep
+
+    $pen = [System.Drawing.Pen]::new($Brush, $Stroke)
+    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+    $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Flat
+    $Graphics.DrawArc($pen, $CenterX - $Radius, $CenterY - $Radius, $Radius * 2, $Radius * 2, $startAngle, $sweep)
+    $pen.Dispose()
+
+    $theta = $endAngle * [Math]::PI / 180.0
+    $endX = $CenterX + $Radius * [Math]::Cos($theta)
+    $endY = $CenterY + $Radius * [Math]::Sin($theta)
+    $dirX = -[Math]::Sin($theta)
+    $dirY = [Math]::Cos($theta)
+    $normX = -$dirY
+    $normY = $dirX
+
+    $headLength = $Stroke * 1.3
+    $headHalfWidth = $Stroke * 1.1
+    $baseX = $endX - $dirX * ($Stroke * 0.2)
+    $baseY = $endY - $dirY * ($Stroke * 0.2)
+
+    $points = [System.Drawing.PointF[]] @(
+        [System.Drawing.PointF]::new($baseX + $dirX * $headLength, $baseY + $dirY * $headLength),
+        [System.Drawing.PointF]::new($baseX + $normX * $headHalfWidth, $baseY + $normY * $headHalfWidth),
+        [System.Drawing.PointF]::new($baseX - $normX * $headHalfWidth, $baseY - $normY * $headHalfWidth)
+    )
+    $Graphics.FillPolygon($Brush, $points)
 }
 
 function New-LogoBitmap {
@@ -36,62 +87,79 @@ function New-LogoBitmap {
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
     $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
     $graphics.Clear([System.Drawing.Color]::Transparent)
 
     $scale = $Size / 256.0
-    function S([float] $value) { return $value * $scale }
+    function S([float] $value) { return [float]($value * $scale) }
 
-    $backgroundPath = New-RoundedRectanglePath (S 16) (S 16) (S 224) (S 224) (S 48)
+    # Detail tiers keep the mark legible in the notification area.
+    $small = $Size -le 24
+    $medium = $Size -gt 24 -and $Size -le 48
+
+    $inset = if ($small) { 0 } elseif ($medium) { 6 } else { 12 }
+    $radius = if ($small) { 64 } else { 56 }
+    $backgroundPath = New-RoundedRectanglePath (S $inset) (S $inset) (S (256 - 2 * $inset)) (S (256 - 2 * $inset)) (S $radius)
     $backgroundBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-        [System.Drawing.PointF]::new((S 40), (S 24)),
-        [System.Drawing.PointF]::new((S 216), (S 232)),
-        [System.Drawing.ColorTranslator]::FromHtml('#38bdf8'),
-        [System.Drawing.ColorTranslator]::FromHtml('#1e3a8a'))
+        [System.Drawing.PointF]::new((S 0), (S 0)),
+        [System.Drawing.PointF]::new((S 256), (S 256)),
+        (Color '#4FB4FF'),
+        (Color '#0B3C8F'))
     $blend = [System.Drawing.Drawing2D.ColorBlend]::new()
-    $blend.Positions = [float[]] @(0, 0.5, 1)
-    $blend.Colors = [System.Drawing.Color[]] @(
-        [System.Drawing.ColorTranslator]::FromHtml('#38bdf8'),
-        [System.Drawing.ColorTranslator]::FromHtml('#2563eb'),
-        [System.Drawing.ColorTranslator]::FromHtml('#1e3a8a'))
+    $blend.Positions = [float[]] @(0, 0.55, 1)
+    $blend.Colors = [System.Drawing.Color[]] @((Color '#4FB4FF'), (Color '#1F6FE0'), (Color '#0B3C8F'))
     $backgroundBrush.InterpolationColors = $blend
     $graphics.FillPath($backgroundBrush, $backgroundPath)
 
     $whiteBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::White)
-    $screenBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-        [System.Drawing.PointF]::new((S 78), (S 76)),
-        [System.Drawing.PointF]::new((S 178), (S 164)),
-        [System.Drawing.ColorTranslator]::FromHtml('#eff6ff'),
-        [System.Drawing.ColorTranslator]::FromHtml('#dbeafe'))
+    $arrowBrush = [System.Drawing.SolidBrush]::new((Color '#22C55E'))
 
-    $monitorPath = New-RoundedRectanglePath (S 50) (S 66) (S 156) (S 104) (S 18)
-    $screenPath = New-RoundedRectanglePath (S 64) (S 80) (S 128) (S 76) (S 10)
-    $standPath = New-RoundedRectanglePath (S 113) (S 169) (S 30) (S 24) (S 5)
-    $basePath = New-RoundedRectanglePath (S 88) (S 192) (S 80) (S 16) (S 8)
-    $graphics.FillPath($whiteBrush, $monitorPath)
-    $graphics.FillPath($screenBrush, $screenPath)
-    $graphics.FillPath($whiteBrush, $standPath)
-    $graphics.FillPath($whiteBrush, $basePath)
+    if ($small) {
+        # Background + big arrow only. Windows and title bars turn to mush at 16px.
+        Draw-RestartArrow -Graphics $graphics -Brush $whiteBrush -CenterX (S 128) -CenterY (S 128) -Radius (S 78) -Stroke (S 34)
+    }
+    else {
+        $windowX = if ($medium) { 34 } else { 40 }
+        $windowY = if ($medium) { 48 } else { 56 }
+        $windowW = 256 - 2 * $windowX
+        $windowH = if ($medium) { 160 } else { 144 }
+        $windowR = 20
+        $titleH = if ($medium) { 34 } else { 30 }
 
-    $restartColor = [System.Drawing.ColorTranslator]::FromHtml('#10b981')
-    $restartPen = [System.Drawing.Pen]::new($restartColor, [Math]::Max((S 16), 2))
-    $restartPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $restartPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $restartPen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+        $windowPath = New-RoundedRectanglePath (S $windowX) (S $windowY) (S $windowW) (S $windowH) (S $windowR)
+        $titlePath = New-RoundedRectanglePath (S $windowX) (S $windowY) (S $windowW) (S $titleH) (S $windowR) -TopOnly
 
-    $graphics.DrawArc($restartPen, (S 91), (S 84), (S 74), (S 74), 36, 262)
-    $graphics.DrawLine($restartPen, (S 158), (S 84), (S 158), (S 117))
-    $graphics.DrawLine($restartPen, (S 158), (S 117), (S 190), (S 117))
+        $screenBrush = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+            [System.Drawing.PointF]::new((S $windowX), (S $windowY)),
+            [System.Drawing.PointF]::new((S $windowX), (S ($windowY + $windowH))),
+            [System.Drawing.Color]::White,
+            (Color '#EAF3FF'))
+        $graphics.FillPath($screenBrush, $windowPath)
 
-    $centerBrush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#1e3a8a'))
-    $graphics.FillEllipse($centerBrush, (S 118), (S 109), (S 20), (S 20))
+        $titleBrush = [System.Drawing.SolidBrush]::new((Color '#C7E0FF'))
+        $graphics.FillPath($titleBrush, $titlePath)
 
-    $centerBrush.Dispose()
-    $restartPen.Dispose()
-    $screenPath.Dispose()
-    $monitorPath.Dispose()
-    $standPath.Dispose()
-    $basePath.Dispose()
-    $screenBrush.Dispose()
+        if (-not $medium) {
+            $dotBrush = [System.Drawing.SolidBrush]::new((Color '#7FB3F0'))
+            $dotY = $windowY + $titleH / 2 - 5
+            $graphics.FillEllipse($dotBrush, (S 58), (S $dotY), (S 10), (S 10))
+            $graphics.FillEllipse($dotBrush, (S 76), (S $dotY), (S 10), (S 10))
+            $dotBrush.Dispose()
+        }
+
+        $screenTop = $windowY + $titleH
+        $screenCenterY = $screenTop + ($windowH - $titleH) / 2
+        $arrowRadius = if ($medium) { 42 } else { 40 }
+        $arrowStroke = if ($medium) { 18 } else { 16 }
+        Draw-RestartArrow -Graphics $graphics -Brush $arrowBrush -CenterX (S 128) -CenterY (S $screenCenterY) -Radius (S $arrowRadius) -Stroke (S $arrowStroke)
+
+        $titleBrush.Dispose()
+        $screenBrush.Dispose()
+        $titlePath.Dispose()
+        $windowPath.Dispose()
+    }
+
+    $arrowBrush.Dispose()
     $whiteBrush.Dispose()
     $backgroundBrush.Dispose()
     $backgroundPath.Dispose()
@@ -153,7 +221,7 @@ $preview = New-LogoBitmap -Size 256
 $preview.Save($previewPng, [System.Drawing.Imaging.ImageFormat]::Png)
 $preview.Dispose()
 
-Write-IconFile -Path $sourceIcon -Sizes @(256, 128, 64, 48, 32, 16)
+Write-IconFile -Path $sourceIcon -Sizes @(256, 128, 64, 48, 40, 32, 24, 20, 16)
 
 Write-Host "Generated $sourceIcon" -ForegroundColor Green
 Write-Host "Generated $previewPng" -ForegroundColor Green

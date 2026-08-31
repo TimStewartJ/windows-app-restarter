@@ -14,17 +14,32 @@ Get-Process -Name explorer | Stop-Process -Force
 Start-Process explorer.exe
 ```
 
+<p align="center">
+  <img src="assets/flyout-dark.png" width="360" alt="Windows App Restarter flyout in dark mode">
+</p>
+
 ## What it does
 
 - Adds a tray icon named **Windows App Restarter**.
-- Double-click the icon, or right-click and choose **Restart Windows App + Explorer**.
-- Launching the app opens the tray menu; launching it again activates the existing tray instance instead of starting a duplicate copy.
-- The auto-start entry uses `--background` so the menu does not pop open every time you sign in.
+- Click the icon to open a Windows 11 style flyout with the restart button, live progress, the last result, and settings.
+- Double-click the icon to restart immediately, or right-click for a compact menu.
+- Launching the app opens the flyout; launching it again activates the existing tray instance instead of starting a duplicate copy.
+- The auto-start entry uses `--background` so the flyout does not pop open every time you sign in.
 - Stops `Windows365`, `msrdcw`, and `msrdc` if they are running.
 - Restarts `explorer.exe` and recreates the tray icon afterward.
-- Shows a Windows notification with the result.
+- Shows a Windows notification with the result when the flyout is closed.
 - Can start automatically when you sign in.
 - Writes logs to `%LOCALAPPDATA%\WindowsAppRestarter\WindowsAppRestarter.log`.
+
+## Design
+
+The flyout follows the Windows 11 Fluent design system and is drawn natively with no UI framework dependencies:
+
+- Acrylic backdrop, rounded corners, and a DWM border, with a solid fallback when transparency effects are off.
+- Light and dark theme, your accent color, and high contrast are picked up from Windows automatically.
+- Segoe UI Variable type ramp and Segoe Fluent Icons glyphs.
+- Slides in from the taskbar edge, closes when you click away or press <kbd>Esc</kbd>, and supports keyboard navigation.
+- Per-monitor DPI aware.
 
 ## Install
 
@@ -41,7 +56,7 @@ Portable:
 1. Download `WindowsAppRestarter-win-x64-portable.zip`.
 2. Extract it somewhere stable, such as `%LOCALAPPDATA%\Programs\WindowsAppRestarter`.
 3. Run `WindowsAppRestarter.exe`.
-4. Right-click the tray icon and enable **Start with Windows**.
+4. Turn on **Start with Windows** in the flyout.
 
 ## Build locally
 
@@ -53,6 +68,12 @@ Requirements:
 ```powershell
 .\scripts\publish-local.ps1
 .\scripts\build-installer.ps1
+```
+
+To regenerate the icon and logo assets after editing `scripts\generate-assets.ps1`:
+
+```powershell
+.\scripts\generate-assets.ps1
 ```
 
 The generated executable is written to:

@@ -8,12 +8,13 @@ internal sealed class RestartService
     private static readonly string[] WindowsAppProcessNames = ["Windows365", "msrdcw", "msrdc"];
     private static readonly TimeSpan ProcessExitTimeout = TimeSpan.FromSeconds(5);
 
-    public async Task<RestartResult> RestartAsync(CancellationToken cancellationToken = default)
+    public async Task<RestartResult> RestartAsync(IProgress<string>? progress = null, CancellationToken cancellationToken = default)
     {
         var stoppedWindowsAppProcesses = new List<StoppedProcess>();
         var stoppedExplorerProcesses = new List<StoppedProcess>();
         var failures = new List<string>();
 
+        progress?.Report("Stopping Windows App…");
         foreach (var processName in WindowsAppProcessNames)
         {
             await StopProcessesByNameAsync(
@@ -24,6 +25,7 @@ internal sealed class RestartService
                 cancellationToken);
         }
 
+        progress?.Report("Restarting Explorer…");
         await StopProcessesByNameAsync(
             "explorer",
             stoppedExplorerProcesses,
@@ -31,6 +33,7 @@ internal sealed class RestartService
             entireProcessTree: false,
             cancellationToken);
 
+        progress?.Report("Waiting for Explorer to come back…");
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
         var explorerStarted = false;

@@ -8,6 +8,9 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+#pragma warning disable WFO5001 // Dark mode is still flagged experimental; it themes the tray menu and message boxes.
+        Application.SetColorMode(SystemColorMode.System);
+#pragma warning restore WFO5001
 
         var startInBackground = args.Any(argument =>
             string.Equals(argument, "--background", StringComparison.OrdinalIgnoreCase));
@@ -18,7 +21,7 @@ internal static class Program
             if (!SingleInstanceActivation.NotifyRunningInstance())
             {
                 MessageBox.Show(
-                    "Windows App Restarter is already running, but the tray menu could not be opened automatically. Look for the Windows App Restarter icon in the notification area.",
+                    "Windows App Restarter is already running, but its flyout could not be opened automatically. Look for the Windows App Restarter icon in the notification area.",
                     "Windows App Restarter",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
@@ -28,7 +31,7 @@ internal static class Program
         }
 
         AppLogger.Info("Application started.");
-        Application.Run(new TrayApplicationContext(showMenuOnStartup: !startInBackground));
+        Application.Run(new TrayApplicationContext(showFlyoutOnStartup: !startInBackground));
         AppLogger.Info("Application exited.");
         GC.KeepAlive(mutex);
     }

@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using WindowsAppRestarter.Interop;
 
 namespace WindowsAppRestarter;
 
@@ -15,6 +16,9 @@ internal static partial class SingleInstanceActivation
     {
         try
         {
+            // Let the running instance bring its flyout to the foreground even though we are the active process.
+            NativeMethods.AllowSetForegroundWindow(NativeMethods.ASFW_ANY);
+
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             client.Connect(ClientConnectTimeout);
             client.WriteByte(1);

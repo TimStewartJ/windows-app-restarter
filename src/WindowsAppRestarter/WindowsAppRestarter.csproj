@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -8,10 +8,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>WindowsAppRestarter</AssemblyName>
     <RootNamespace>WindowsAppRestarter</RootNamespace>
-    <Version>0.1.2</Version>
+    <Version>0.2.0</Version>
     <Authors>TimStewartJ</Authors>
     <Description>A tray utility for restarting the Windows App client and Explorer.</Description>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationVisualStyles>true</ApplicationVisualStyles>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
 </Project>
