@@ -93,7 +93,7 @@ internal sealed class FlyoutForm : Form
         {
             Glyph = FluentGlyphs.Sync,
             Label = "Automatic updates",
-            Description = "Install new versions silently in the background"
+            Description = "Install new versions silently"
         };
         updates.Activated = () => AutoUpdateToggled?.Invoke(!updates.Checked);
         autoUpdateToggle = updates;
