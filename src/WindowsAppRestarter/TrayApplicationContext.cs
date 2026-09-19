@@ -13,6 +13,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(6);
     private static readonly TimeSpan UpdateRetryDelay = TimeSpan.FromMinutes(1);
 
+    // The update timer fires the moment the PC wakes up or signs in, usually before the network is back.
+    // Retry those quickly, backing off to the regular interval if GitHub stays unreachable.
+    private static readonly TimeSpan[] NetworkRetryDelays =
+    [
+        TimeSpan.FromMinutes(1),
+        TimeSpan.FromMinutes(5),
+        TimeSpan.FromMinutes(15),
+        TimeSpan.FromHours(1)
+    ];
+
     private readonly RestartService restartService = new();
     private readonly StartupManager startupManager = new(Application.ExecutablePath);
     private readonly AppSettings settings = new();
@@ -33,6 +43,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private RestartStatus status = RestartStatus.Idle;
     private bool updateCycleRunning;
     private bool exitingForUpdate;
+    private int consecutiveNetworkFailures;
     private string? pendingInstallerPath;
     private Version? pendingUpdateVersion;
 
@@ -161,6 +172,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 UpdateService.CleanUpDownloads();
 
                 var update = await updateService.CheckForUpdateAsync(activationCancellation.Token);
+                consecutiveNetworkFailures = 0;
                 if (update is null)
                 {
                     AppLogger.Info($"Update check: version {updateService.CurrentVersion} is current.");
@@ -181,6 +193,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         catch (OperationCanceledException) when (activationCancellation.IsCancellationRequested)
         {
         }
+        catch (Exception exception) when (UpdateService.IsTransientNetworkFailure(exception))
+        {
+            if (consecutiveNetworkFailures < NetworkRetryDelays.Length)
+            {
+                nextCheck = NetworkRetryDelays[consecutiveNetworkFailures];
+                consecutiveNetworkFailures++;
+            }
+
+            AppLogger.Info($"Update check: could not reach GitHub; trying again in {DescribeDelay(nextCheck)}. {exception.Message}");
+            pendingInstallerPath = null;
+            pendingUpdateVersion = null;
+        }
         catch (Exception exception)
         {
             AppLogger.Error("Automatic update failed; will try again later.", exception);
@@ -196,6 +220,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 updateTimer.Start();
             }
         }
+    }
+
+    private static string DescribeDelay(TimeSpan delay)
+    {
+        var (amount, unit) = delay.TotalHours >= 1
+            ? ((int)delay.TotalHours, "hour")
+            : ((int)delay.TotalMinutes, "minute");
+        return amount == 1 ? $"1 {unit}" : $"{amount} {unit}s";
     }
 
     /// <summary>Installs a downloaded update unless the user is mid-restart or has the flyout open.</summary>

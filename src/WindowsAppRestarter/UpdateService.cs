@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 
 namespace WindowsAppRestarter;
@@ -54,6 +55,26 @@ internal sealed class UpdateService : IDisposable
     {
         var directory = Path.GetDirectoryName(Environment.ProcessPath);
         return directory is not null && File.Exists(Path.Combine(directory, "unins000.exe"));
+    }
+
+    /// <summary>
+    /// True when GitHub could not be reached or did not answer properly: no DNS, no connection, a timeout, a
+    /// dropped download, or an error status. That is expected whenever the PC has just woken up or signed in
+    /// and the network is not back yet, so it calls for a quick retry rather than an error report. A release
+    /// that fails verification is not one of these.
+    /// </summary>
+    public static bool IsTransientNetworkFailure(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            // HttpClient reports its own timeout as a cancellation wrapping a TimeoutException.
+            if (current is HttpRequestException or HttpIOException or SocketException or TimeoutException)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task<AvailableUpdate?> CheckForUpdateAsync(CancellationToken cancellationToken)

@@ -30,6 +30,7 @@ Start-Process explorer.exe
 - Stops `Windows365`, `msrdcw`, and `msrdc` if they are running.
 - Clears stuck sign-in prompts by stopping the on-demand `CredentialUIBroker` (Windows Security / passkey dialog) and `Microsoft.AAD.BrokerPlugin` (work or school account) brokers. A stale broker makes every redirected passkey request fail with "a remote procedure call is already in progress" until it is cleared; Windows recreates both automatically.
 - Restarts `explorer.exe` and recreates the tray icon afterward.
+- Only touches processes in your own Windows session, so other signed-in users are left alone. A process Windows will not let it stop (one running elevated or protected) never fails the restart: it is given a moment to exit on its own, and if it stays it is reported in the result and the log along with what to do about it.
 - Shows a Windows notification with the result when the flyout is closed.
 - Can start automatically when you sign in.
 - Keeps itself up to date silently (see below).
@@ -40,6 +41,7 @@ Start-Process explorer.exe
 Installer-based installs update themselves in the background with no prompts:
 
 - 20 seconds after launch and every 6 hours, the app looks up the latest GitHub release (a single `HEAD` request to `releases/latest`, no API token or rate limit).
+- If GitHub cannot be reached, typically because the PC has just woken up or signed in and the network is not back yet, the check is retried after 1, 5, 15, and 60 minutes before returning to the 6-hour schedule. These are logged as ordinary entries, not errors.
 - If it is newer, the installer and the release's `SHA256SUMS.txt` are downloaded to `%LOCALAPPDATA%\WindowsAppRestarter\updates\`. The installer is only used if its SHA-256 matches; anything else is discarded and logged.
 - The update is applied only when no restart is running and the flyout is closed. The app exits, the installer runs silently (`/VERYSILENT`, keeping your **Start with Windows** choice), and relaunches the app in the tray.
 - Turn it off with the **Automatic updates** toggle in the flyout or the tray menu (stored at `HKCU\Software\WindowsAppRestarter\AutoUpdate`).
