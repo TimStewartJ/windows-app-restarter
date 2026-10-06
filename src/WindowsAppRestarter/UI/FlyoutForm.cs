@@ -22,6 +22,7 @@ internal sealed class FlyoutForm : Form
     private readonly string versionText;
     private readonly Icon appIcon;
     private readonly AccentButton restartButton;
+    private readonly SecondaryButton audioButton;
     private readonly ToggleRow startupToggle;
     private readonly ToggleRow autoUpdateToggle;
     private readonly NavigationRow logsRow;
@@ -81,6 +82,12 @@ internal sealed class FlyoutForm : Form
             Glyph = FluentGlyphs.Refresh,
             Activated = () => RestartRequested?.Invoke()
         };
+        audioButton = new SecondaryButton
+        {
+            Text = "Restart audio service",
+            Glyph = FluentGlyphs.Volume,
+            Activated = () => AudioRestartRequested?.Invoke()
+        };
         var toggle = new ToggleRow
         {
             Glyph = FluentGlyphs.Power,
@@ -108,7 +115,7 @@ internal sealed class FlyoutForm : Form
             Text = "Exit",
             Activated = () => ExitRequested?.Invoke()
         };
-        elements = [restartButton, startupToggle, autoUpdateToggle, logsRow, exitButton];
+        elements = [restartButton, audioButton, startupToggle, autoUpdateToggle, logsRow, exitButton];
 
         animationTimer = new System.Windows.Forms.Timer { Interval = 15 };
         animationTimer.Tick += (_, _) => OnAnimationFrame();
@@ -120,6 +127,7 @@ internal sealed class FlyoutForm : Form
     }
 
     public event Action? RestartRequested;
+    public event Action? AudioRestartRequested;
     public event Action<bool>? StartupToggled;
     public event Action<bool>? AutoUpdateToggled;
     public event Action? OpenLogsRequested;
@@ -143,10 +151,11 @@ internal sealed class FlyoutForm : Form
         var wasRunning = status.IsRunning;
         status = value;
         restartButton.Enabled = !value.IsRunning;
-        if (!restartButton.Enabled && pressedElement == restartButton)
+        audioButton.Enabled = !value.IsRunning;
+        if (value.IsRunning && (pressedElement == restartButton || pressedElement == audioButton))
         {
+            pressedElement.Pressed = false;
             pressedElement = null;
-            restartButton.Pressed = false;
         }
 
         if (Visible)
@@ -422,7 +431,11 @@ internal sealed class FlyoutForm : Form
 
     private void PerformFlyoutLayout()
     {
-        using var graphics = CreateGraphics();
+        // Measure at the monitor's DPI, exactly as OnPaint draws. A window DC reports the DPI the process started
+        // with, so after a display scale change text was measured too small and overflowed its card.
+        using var measureSurface = new Bitmap(1, 1);
+        measureSurface.SetResolution(DeviceDpi, DeviceDpi);
+        using var graphics = Graphics.FromImage(measureSurface);
         FluentDrawing.Prepare(graphics);
 
         var width = Px(FlyoutWidthDip);
@@ -441,7 +454,10 @@ internal sealed class FlyoutForm : Form
         y += statusHeight + Px(12);
 
         restartButton.Bounds = new Rectangle(padding, y, contentWidth, Px(40));
-        y += restartButton.Bounds.Height + Px(20);
+        y += restartButton.Bounds.Height + Px(8);
+
+        audioButton.Bounds = new Rectangle(padding, y, contentWidth, Px(36));
+        y += audioButton.Bounds.Height + Px(20);
 
         startupToggle.Bounds = new Rectangle(padding, y, contentWidth, Px(60));
         y += startupToggle.Bounds.Height + Px(4);

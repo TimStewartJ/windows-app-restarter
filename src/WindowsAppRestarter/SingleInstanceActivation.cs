@@ -69,7 +69,9 @@ internal static partial class SingleInstanceActivation
 
     private static string PipeNameSafeValue()
     {
-        var input = $"{Environment.UserDomainName}-{Environment.UserName}-{Environment.GetEnvironmentVariable("SESSIONNAME")}";
+        // Nothing from the environment block: SESSIONNAME differs between launch contexts (Explorer, a terminal,
+        // a script), which made a second launch look for a pipe the running instance never created.
+        var input = $"{Environment.UserDomainName}-{Environment.UserName}";
         return PipeNameUnsafeCharacters().Replace(input, "_");
     }
 

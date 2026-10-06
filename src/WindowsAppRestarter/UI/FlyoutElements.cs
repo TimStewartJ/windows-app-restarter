@@ -271,6 +271,37 @@ internal sealed class NavigationRow : CardRow
     }
 }
 
+/// <summary>The standard (non-accent) Fluent button: a quiet filled surface for a secondary action.</summary>
+internal sealed class SecondaryButton : FlyoutElement
+{
+    public string Text { get; set; } = string.Empty;
+    public string Glyph { get; set; } = string.Empty;
+
+    public override void Paint(Graphics graphics, FlyoutRenderContext context)
+    {
+        var theme = context.Theme;
+        var radius = context.PxF(CornerRadius);
+        var fill = Pressed ? theme.ControlFillPressed : Hovered ? theme.ControlFillHover : theme.ControlFill;
+        var foreground = !Enabled ? theme.TextDisabled : Pressed ? theme.TextSecondary : theme.TextPrimary;
+        FluentDrawing.FillRoundedRectangle(graphics, Bounds, radius, fill);
+        FluentDrawing.StrokeRoundedRectangle(graphics, Bounds, radius, theme.ControlStroke, context.Scale);
+
+        var hasGlyph = !string.IsNullOrEmpty(Glyph) && context.Fonts.HasIconFont;
+        var textSize = graphics.MeasureString(Text, context.Fonts.Body, int.MaxValue, FluentDrawing.Centered);
+        var glyphSize = hasGlyph ? context.PxF(16) : 0f;
+        var gap = hasGlyph ? context.PxF(10) : 0f;
+        var left = Bounds.Left + (Bounds.Width - (glyphSize + gap + textSize.Width)) / 2f;
+
+        if (hasGlyph)
+        {
+            FluentDrawing.DrawGlyph(graphics, Glyph, context.Fonts.Icon, foreground, new RectangleF(left, Bounds.Top, glyphSize, Bounds.Height));
+        }
+
+        FluentDrawing.DrawText(graphics, Text, context.Fonts.Body, foreground, new RectangleF(left + glyphSize + gap, Bounds.Top, textSize.Width + context.PxF(4), Bounds.Height), FluentDrawing.Centered);
+        PaintFocus(graphics, context);
+    }
+}
+
 internal sealed class SubtleButton : FlyoutElement
 {
     public string Text { get; set; } = string.Empty;

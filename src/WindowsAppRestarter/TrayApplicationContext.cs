@@ -34,6 +34,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly NotifyIcon trayIcon;
     private readonly ContextMenuStrip trayMenu;
     private readonly ToolStripMenuItem restartMenuItem;
+    private readonly ToolStripMenuItem audioMenuItem;
     private readonly ToolStripMenuItem startupMenuItem;
     private readonly ToolStripMenuItem autoUpdateMenuItem;
     private readonly ToolStripMenuItem statusMenuItem;
@@ -54,6 +55,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         flyout = new FlyoutForm(trayAppIcon, $"Version {GetDisplayVersion()}");
         flyout.RestartRequested += () => _ = RestartAsync();
+        flyout.AudioRestartRequested += () => _ = RestartAudioAsync();
         flyout.StartupToggled += SetStartup;
         flyout.AutoUpdateToggled += SetAutoUpdate;
         flyout.OpenLogsRequested += OpenLogs;
@@ -68,6 +70,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             restartMenuItem.Font = new Font(menuFont, FontStyle.Bold);
         }
 
+        audioMenuItem = new ToolStripMenuItem("Restart audio service", null, (_, _) => _ = RestartAudioAsync());
         statusMenuItem = new ToolStripMenuItem(status.ToMenuText()) { Enabled = false };
         startupMenuItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => SetStartup(!ReadStartupEnabled()));
         autoUpdateMenuItem = new ToolStripMenuItem("Automatic updates", null, (_, _) => SetAutoUpdate(!settings.AutoUpdateEnabled));
@@ -87,6 +90,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         [
             openMenuItem,
             restartMenuItem,
+            audioMenuItem,
             new ToolStripSeparator(),
             statusMenuItem,
             startupMenuItem,
@@ -319,10 +323,30 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
+    private async Task RestartAudioAsync()
+    {
+        if (status.IsRunning)
+        {
+            return;
+        }
+
+        AppLogger.Info("Audio service restart requested.");
+        UpdateStatus(RestartStatus.Running("Restarting the Windows Audio service. Approve the Windows prompt to continue."));
+
+        var result = await AudioServiceRestarter.RestartAsync();
+        AppLogger.Info($"{result.Title}. {result.Detail}");
+        UpdateStatus(result);
+        if (!flyout.Visible)
+        {
+            ShowBalloon(result.Title, result.Detail, result.State == RestartState.Succeeded ? ToolTipIcon.Info : ToolTipIcon.Warning, 3000);
+        }
+    }
+
     private void UpdateStatus(RestartStatus value)
     {
         status = value;
         restartMenuItem.Enabled = !value.IsRunning;
+        audioMenuItem.Enabled = !value.IsRunning;
         statusMenuItem.Text = value.ToMenuText();
         flyout.SetStatus(value);
     }

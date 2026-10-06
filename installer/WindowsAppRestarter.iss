@@ -3,7 +3,7 @@
 #define AppExeName "WindowsAppRestarter.exe"
 
 #ifndef AppVersion
-#define AppVersion "0.3.2"
+#define AppVersion "0.4.0"
 #endif
 
 #ifndef SourceDir

@@ -15,6 +15,7 @@ internal static class FluentGlyphs
     public const string Sync = "\uE895";
     public const string Document = "\uE8A5";
     public const string ChevronRight = "\uE76C";
+    public const string Volume = "\uE767";
 }
 
 internal sealed class FlyoutRenderContext(FluentTheme theme, FluentFonts fonts, float scale, bool showFocusVisuals)

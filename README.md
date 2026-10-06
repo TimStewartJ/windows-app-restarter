@@ -31,6 +31,7 @@ Start-Process explorer.exe
 - Clears stuck sign-in prompts by stopping the on-demand `CredentialUIBroker` (Windows Security / passkey dialog) and `Microsoft.AAD.BrokerPlugin` (work or school account) brokers. A stale broker makes every redirected passkey request fail with "a remote procedure call is already in progress" until it is cleared; Windows recreates both automatically.
 - Restarts `explorer.exe` and recreates the tray icon afterward.
 - Only touches processes in your own Windows session, so other signed-in users are left alone. A process Windows will not let it stop (one running elevated or protected) never fails the restart: it is given a moment to exit on its own, and if it stays it is reported in the result and the log along with what to do about it.
+- **Restart audio service** (flyout and right-click menu) restarts the Windows Audio service (`Audiosrv`) and nothing else. Stopping a service needs administrator rights, so Windows shows its approval prompt each time; declining it changes nothing.
 - Shows a Windows notification with the result when the flyout is closed.
 - Can start automatically when you sign in.
 - Keeps itself up to date silently (see below).
